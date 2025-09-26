@@ -4,8 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-     "lint": "echo lint ok",
-     "build": "echo build ok"
+    "lint": "echo lint ok",
+    "build": "echo build ok"
   },
   "repository": {
     "type": "git",
@@ -17,5 +17,8 @@
   "bugs": {
     "url": "https://github.com/hasanbasri17/monolith-fullstack/issues"
   },
-  "homepage": "https://github.com/hasanbasri17/monolith-fullstack#readme"
+  "homepage": "https://github.com/hasanbasri17/monolith-fullstack#readme",
+  "engines": {
+    "node": "22.19.0"
+  }
 }
