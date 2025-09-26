@@ -1,0 +1,21 @@
+{
+  "name": "monolith-fullstack",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+     "lint": "echo lint ok",
+     "build": "echo build ok"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hasanbasri17/monolith-fullstack.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/hasanbasri17/monolith-fullstack/issues"
+  },
+  "homepage": "https://github.com/hasanbasri17/monolith-fullstack#readme"
+}
