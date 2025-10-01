@@ -1,24 +1,157 @@
 name: CI
+
 on:
   pull_request:
     branches: [ main, dev ]
+    paths:
+      - 'apps/frontend/**'
+      - 'apps/backend/**'
+      - '.github/workflows/**'
   push:
     branches: [ dev ]
+    paths:
+      - 'apps/frontend/**'
+      - 'apps/backend/**'
+      - '.github/workflows/**'
 
 jobs:
-  web:
+  frontend:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
         node: [22.19.0]
     runs-on: ${{ matrix.os }}
+
+    # Penting: paksa Windows runner pakai bash agar skrip [ -f ... ] valid
+    defaults:
+      run:
+        shell: bash
+
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node }}
-          cache: npm
-      - run: npm ci || npm i
-      - run: npm run lint --if-present
-      - run: npm run build --if-present
 
+      # Deteksi proyek & lockfile tanpa menyentuh working-directory yang belum ada
+      - id: detect-frontend
+        name: Detect frontend project
+        run: |
+          if [ -f "apps/frontend/package.json" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -f "apps/frontend/package-lock.json" ]; then
+            echo "has_lock=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_lock=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Setup Node + cache npm (jika ada lockfile)
+      - name: Setup Node (with npm cache)
+        if: steps.detect-frontend.outputs.present == 'true' && steps.detect-frontend.outputs.has_lock == 'true'
+        uses: actions/setup-node@v4
+        with:
+            node-version: ${{ matrix.node }}
+            cache: npm
+            cache-dependency-path: apps/frontend/package-lock.json
+
+      # Fallback tanpa cache saat lockfile belum ada
+      - name: Setup Node (no cache)
+        if: steps.detect-frontend.outputs.present == 'true' && steps.detect-frontend.outputs.has_lock == 'false'
+        uses: actions/setup-node@v4
+        with:
+            node-version: ${{ matrix.node }}
+
+      - name: Install (frontend)
+        if: steps.detect-frontend.outputs.present == 'true'
+        working-directory: apps/frontend
+        run: npm ci || npm i
+
+      - name: Lint (frontend)
+        if: steps.detect-frontend.outputs.present == 'true'
+        working-directory: apps/frontend
+        run: npm run lint --if-present
+
+      - name: Test (frontend)
+        if: steps.detect-frontend.outputs.present == 'true'
+        working-directory: apps/frontend
+        run: npm test --if-present -- --ci
+
+      - name: Build (frontend)
+        if: steps.detect-frontend.outputs.present == 'true'
+        working-directory: apps/frontend
+        run: npm run build --if-present
+
+      - name: Upload dist (frontend)
+        if: steps.detect-frontend.outputs.present == 'true' && success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: apps/frontend/dist/
+
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Deteksi proyek backend (Maven/Gradle)
+      - id: detect-backend
+        name: Detect backend project
+        shell: bash
+        run: |
+          if [ -f "apps/backend/pom.xml" ] || [ -f "apps/backend/build.gradle" ] || [ -f "apps/backend/settings.gradle" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -f "apps/backend/pom.xml" ]; then
+            echo "tool=maven" >> "$GITHUB_OUTPUT"
+          elif [ -f "apps/backend/build.gradle" ] || [ -f "apps/backend/settings.gradle" ]; then
+            echo "tool=gradle" >> "$GITHUB_OUTPUT"
+          else
+            echo "tool=none" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Java (Temurin 21, cache Maven)
+        if: steps.detect-backend.outputs.present == 'true' && steps.detect-backend.outputs.tool == 'maven'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Setup Java (Temurin 21, cache Gradle)
+        if: steps.detect-backend.outputs.present == 'true' && steps.detect-backend.outputs.tool == 'gradle'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Test (backend Maven)
+        if: steps.detect-backend.outputs.tool == 'maven'
+        working-directory: apps/backend
+        run: mvn -B -ntp test
+
+      - name: Build (backend Maven)
+        if: steps.detect-backend.outputs.tool == 'maven'
+        working-directory: apps/backend
+        run: mvn -B -ntp verify
+
+      - name: Test (backend Gradle)
+        if: steps.detect-backend.outputs.tool == 'gradle'
+        working-directory: apps/backend
+        run: ./gradlew --no-daemon test
+
+      - name: Build (backend Gradle)
+        if: steps.detect-backend.outputs.tool == 'gradle'
+        working-directory: apps/backend
+        run: ./gradlew --no-daemon build -x test
+
+      - name: Upload JAR (backend)
+        if: steps.detect-backend.outputs.present == 'true' && success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-artifacts
+          path: |
+            apps/backend/target/*.jar
+            apps/backend/build/libs/*.jar
